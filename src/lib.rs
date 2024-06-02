@@ -26,32 +26,37 @@ struct _NasaPage {
 
 static TABLE_SELECTOR: Lazy<Selector> =
     Lazy::new(|| Selector::parse(r#"table[id="indexlist"]"#).unwrap());
+
 fn find_table_in_content(html: &Html) -> Option<scraper::ElementRef> {
     let table = html.select(&TABLE_SELECTOR).next()?;
     Some(table)
+}
+
+async fn parse_url_html(url: &str) -> Result<scraper::Html> {
+    let res = reqwest::get(url).await?;
+    println!("Status: {}", res.status());
+    println!("Headers:\n{:#?}", res.headers());
+
+    let body = res.text().await?;
+    Ok(Html::parse_fragment(&body))
 }
 
 static ROW_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("tr").unwrap());
 static FORMAT_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("img").unwrap());
 static HREF_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("a").unwrap());
 
-#[tokio::main]
-async fn main() -> Result<()> {
+pub async fn iterate_table() -> Result<()> {
     //let cli = Cli::parse();
-    let res = reqwest::get("https://planetarydata.jpl.nasa.gov/img/data/juno/JNOJNC_0001/").await?;
-    println!("Status: {}", res.status());
-    println!("Headers:\n{:#?}", res.headers());
-
-    let body = res.text().await?;
-    let html = Html::parse_fragment(&body);
+    let url = "https://planetarydata.jpl.nasa.gov/img/data/juno/JNOJNC_0001/";
+    let html = parse_url_html(url).await?;
     let table = find_table_in_content(&html).unwrap();
     println!("{}", table.inner_html());
     for row in table.select(&ROW_SELECTOR) {
-        println!("{}", row.html());
+        //println!("{}", row.html());
         let href = row.select(&HREF_SELECTOR).next().unwrap();
         println!(
-            "\n{} --- {} \n",
-            href.html(),
+            "\n --- {} \n",
+            //href.html(),
             href.value().attr("href").unwrap()
         );
         let format = href.select(&FORMAT_SELECTOR).next();
@@ -61,4 +66,9 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(feature = "testable_privates")]
+pub fn testable_find_table_in_content(html: &Html) -> Option<scraper::ElementRef> {
+    find_table_in_content(html)
 }
